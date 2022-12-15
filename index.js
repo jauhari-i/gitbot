@@ -15,7 +15,6 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 client.once(Events.ClientReady, (c) => {
   console.log("Ready as " + c.user.tag);
-  client.user.presence("Repository", { type: "WATCHING" });
 });
 
 client.commands = new Collection();
@@ -39,7 +38,12 @@ for (const file of commandFiles) {
   }
 }
 
-client.login(token);
+client.login(token).then(() => {
+  client.user.setActivity({
+    game: { name: "/ping" },
+    status: "online",
+  });
+});
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
