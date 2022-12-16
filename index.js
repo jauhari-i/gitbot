@@ -4,7 +4,7 @@ const {
   Events,
   Collection,
   GatewayIntentBits,
-  EmbedBuilder,
+  ActivityType,
 } = require("discord.js");
 
 const { token } = process.env;
@@ -14,6 +14,10 @@ const path = require("path");
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 client.once(Events.ClientReady, (c) => {
+  c.user.setPresence({
+    activities: [{ name: "Your Repository", type: ActivityType.Listening }],
+    status: "idle",
+  });
   console.log("Ready as " + c.user.tag);
 });
 
@@ -38,12 +42,7 @@ for (const file of commandFiles) {
   }
 }
 
-client.login(token).then(() => {
-  client.user.setActivity({
-    game: { name: "/ping" },
-    status: "online",
-  });
-});
+client.login(token);
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
