@@ -75,6 +75,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
 // [START gae_node_request_example]
 const express = require("express");
 const cors = require("cors");
+const winston = require("winston");
+
+const { LoggingWinston } = require("@google-cloud/logging-winston");
+
+const loggingWinston = new LoggingWinston();
+
+const logger = winston.createLogger({
+  level: "info",
+  transports: [new winston.transports.Console(), loggingWinston],
+});
 
 const app = express();
 app.use(cors());
@@ -93,6 +103,9 @@ app.get("/", (req, res) => {
 
 app.post("/", async (req, res) => {
   const { data } = req.body;
+
+  console.log(data);
+  logger.info(data);
 
   const payload = data;
 
@@ -151,14 +164,15 @@ app.post("/", async (req, res) => {
     ],
   };
 
-  await client.channels
+  return await client.channels
     .fetch("1049174771683827743")
     .then((channel) => {
       channel.send(message);
-      res.status(200).send("Hi").end();
+      return res.status(200).end();
     })
     .catch((err) => {
-      res.status(500).json(err);
+      logger.error(err);
+      return res.status(500).json(err);
     });
 });
 
