@@ -1,4 +1,12 @@
 require("dotenv").config();
+require("@google-cloud/debug-agent").start({
+  serviceContext: {
+    service: "default",
+    version: "20221217t010710",
+    enableCanary: true,
+  },
+});
+
 const {
   Client,
   Events,
