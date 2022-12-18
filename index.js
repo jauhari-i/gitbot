@@ -6,6 +6,29 @@ require("@google-cloud/debug-agent").start({
     enableCanary: true,
   },
 });
+const winston = require("winston");
+const { LoggingWinston } = require("@google-cloud/logging-winston");
+const express = require("express");
+const cors = require("cors");
+
+const app = express();
+
+app.use(cors());
+app.use(express.json({ limit: "50mb" }));
+app.use(
+  express.urlencoded({
+    limit: "50mb",
+    extended: true,
+    parameterLimit: 500000,
+  })
+);
+
+const loggingWinston = new LoggingWinston();
+
+const logger = winston.createLogger({
+  level: "info",
+  transports: [new winston.transports.Console(), loggingWinston],
+});
 
 const {
   Client,
@@ -39,7 +62,7 @@ const commandFiles = fs
 
 for (const file of commandFiles) {
   const filePath = path.join(commandsPath, file);
-  const command = require(filePath)(client);
+  const command = require(filePath)(client, logger);
   // Set a new item in the Collection with the key as the command name and the value as the exported module
   if ("data" in command && "execute" in command) {
     client.commands.set(command.data.name, command);
@@ -62,9 +85,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   try {
+    logger.info("Excecuting command");
     await command.execute(interaction);
   } catch (error) {
     console.error(error);
+    logger.error(error);
     await interaction.reply({
       content: "There was an error while executing this command!",
       ephemeral: true,
@@ -73,107 +98,95 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 // [START gae_node_request_example]
-const express = require("express");
-const cors = require("cors");
-const winston = require("winston");
-
-const { LoggingWinston } = require("@google-cloud/logging-winston");
-
-const loggingWinston = new LoggingWinston();
-
-const logger = winston.createLogger({
-  level: "info",
-  transports: [new winston.transports.Console(), loggingWinston],
-});
-
-const app = express();
-app.use(cors());
-app.use(express.json({ limit: "50mb" }));
-app.use(
-  express.urlencoded({
-    limit: "50mb",
-    extended: true,
-    parameterLimit: 500000,
-  })
-);
 
 app.get("/", (req, res) => {
   res.status(200).send("Hello, world!").end();
 });
 
 app.post("/", async (req, res) => {
-  const { data } = req.body;
+  try {
+    const { data } = req.body;
 
-  console.log(data);
-  logger.info(data);
+    console.log(data);
+    logger.data(data);
 
-  const payload = data;
+    const payload = data;
 
-  const message = {
-    content: "@everyone",
-    tts: false,
-    components: [
-      {
-        type: 1,
-        components: [
-          {
-            style: 5,
-            label: `Open Github`,
-            url: payload.compare,
-            disabled: false,
-            type: 2,
-          },
-        ],
+    const message = {
+      content: "@everyone",
+      tts: false,
+      components: [
+        {
+          type: 1,
+          components: [
+            {
+              style: 5,
+              label: `Open Github`,
+              url: payload.compare,
+              disabled: false,
+              type: 2,
+            },
+          ],
+        },
+      ],
+      allowed_mentions: {
+        replied_user: false,
+        parse: ["everyone"],
       },
-    ],
-    allowed_mentions: {
-      replied_user: false,
-      parse: ["everyone"],
-    },
-    embeds: [
-      {
-        type: "rich",
-        title: "New Commit Added",
-        description: `Added [${payload.head_commit.added.length}] Modified [${payload.head_commit.modified.length}] Removed [${payload.head_commit.removed.length}]`,
-        color: 0x212ea1,
-        fields: [
-          {
-            name: "Updated By",
-            value: payload.sender.login,
+      embeds: [
+        {
+          type: "rich",
+          title: "New Commit Added",
+          description: `Added [${payload.head_commit.added.length}] Modified [${payload.head_commit.modified.length}] Removed [${payload.head_commit.removed.length}]`,
+          color: 0x212ea1,
+          fields: [
+            {
+              name: "Updated By",
+              value: payload.sender.login,
+            },
+            {
+              name: "Updated Ref",
+              value: payload.ref,
+            },
+          ],
+          timestamp: new Date().toISOString(),
+          image: {
+            url: `https://p.kindpng.com/picc/s/222-2227825_want-you-to-make-disgusted-face-hd-png.png`,
+            height: 0,
+            width: 0,
           },
-          {
-            name: "Updated Ref",
-            value: payload.ref,
+          author: {
+            name: payload.sender.login,
+            icon_url: payload.sender.avatar_url,
           },
-        ],
-        timestamp: new Date().toISOString(),
-        image: {
-          url: `https://p.kindpng.com/picc/s/222-2227825_want-you-to-make-disgusted-face-hd-png.png`,
-          height: 0,
-          width: 0,
+          footer: {
+            text: "Bot Made By Me",
+          },
+          url: payload.head_commit.url,
         },
-        author: {
-          name: payload.sender.login,
-          icon_url: payload.sender.avatar_url,
-        },
-        footer: {
-          text: "Bot Made By Me",
-        },
-        url: payload.head_commit.url,
-      },
-    ],
-  };
+      ],
+    };
 
-  return await client.channels
-    .fetch("1049174771683827743")
-    .then((channel) => {
-      channel.send(message);
-      return res.status(200).end();
-    })
-    .catch((err) => {
-      logger.error(err);
-      return res.status(500).json(err);
-    });
+    const channel = await client.channels.fetch("1049174771683827743");
+
+    await channel.send(message);
+    return res.status(200);
+  } catch (error) {
+    logger.error(error);
+    return res.status(500).json(error);
+  }
+});
+
+app.get("/dummy", async (req, res) => {
+  try {
+    const channel = await client.channels.fetch("1049174771683827743");
+
+    channel.send({ content: "Test" });
+
+    console.log(channel);
+  } catch (error) {
+    return res.status(500).json(error);
+  }
 });
 
 const PORT = parseInt(process.env.PORT) || 8080;
